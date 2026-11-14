@@ -1,0 +1,83 @@
+# crunch (container runtime): single-node container host with Traefik as the containerized entry point.
+# Routing is driven by labels on each service (like Apache <VirtualHost> blocks).
+
+name: crunch
+
+networks:
+  crunch:
+    name: crunch   # shared network; any container joining it + labels becomes routable
+
+services:
+  traefik:
+    image: traefik:v3.6
+    container_name: crunch-router
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # --- Static config (env-var form so prod overlay can merge in ACME settings) ---
+      TRAEFIK_LOG_LEVEL: INFO
+      TRAEFIK_ACCESSLOG: "true"
+      TRAEFIK_API_DASHBOARD: "true"
+      # Docker provider: discover containers, only route ones that opt in
+      TRAEFIK_PROVIDERS_DOCKER: "true"
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: "false"
+      TRAEFIK_PROVIDERS_DOCKER_NETWORK: crunch
+      # File provider: TLS certificates / shared middlewares
+      TRAEFIK_PROVIDERS_FILE_DIRECTORY: /etc/traefik/dynamic
+      TRAEFIK_PROVIDERS_FILE_WATCH: "true"
+      # Entrypoints: HTTP redirects to HTTPS
+      TRAEFIK_ENTRYPOINTS_WEB_ADDRESS: ":80"
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO: websecure
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME: https
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS: ":443"
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/certs:ro
+    networks: [crunch]
+    labels:
+      traefik.enable: "true"
+      # Dashboard at https://traefik.<DOMAIN>, behind basic auth
+      traefik.http.routers.dashboard.rule: Host(`traefik.${DOMAIN}`)
+      traefik.http.routers.dashboard.entrypoints: websecure
+      traefik.http.routers.dashboard.service: api@internal
+      traefik.http.routers.dashboard.middlewares: dashboard-auth
+      traefik.http.middlewares.dashboard-auth.basicauth.users: ${DASHBOARD_AUTH}
+
+  # ---- Example site 1: routed by hostname -------------------------------
+  app1:
+    image: traefik/whoami:v1.10
+    restart: unless-stopped
+    networks: [crunch]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.app1.rule: Host(`app1.${DOMAIN}`)
+      traefik.http.routers.app1.entrypoints: websecure
+
+  # ---- Example site 2: hostname, plus a path route on the same host ----
+  app2:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks: [crunch]
+    volumes:
+      - ./sites/app2:/usr/share/nginx/html:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.app2.rule: Host(`app2.${DOMAIN}`)
+      traefik.http.routers.app2.entrypoints: websecure
+      traefik.http.services.app2.loadbalancer.server.port: "80"
+
+  # ---- Example: path-based routing (https://<DOMAIN>/api -> this container)
+  api:
+    image: traefik/whoami:v1.10
+    restart: unless-stopped
+    networks: [crunch]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.api.rule: Host(`${DOMAIN}`) && PathPrefix(`/api`)
+      traefik.http.routers.api.entrypoints: websecure
+      traefik.http.routers.api.middlewares: api-strip
+      traefik.http.middlewares.api-strip.stripprefix.prefixes: /api

@@ -1,0 +1,17 @@
+# Production overlay: real domain + automatic Let's Encrypt certificates.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Requires: DNS for each host pointing at this node, ports 80/443 reachable from the internet.
+
+services:
+  traefik:
+    environment:
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_EMAIL: ${ACME_EMAIL}
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_STORAGE: /letsencrypt/acme.json
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_HTTPCHALLENGE_ENTRYPOINT: web
+      # Every router on :443 gets a cert from Let's Encrypt automatically
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS_CERTRESOLVER: le
+    volumes:
+      - letsencrypt:/letsencrypt
+
+volumes:
+  letsencrypt:
