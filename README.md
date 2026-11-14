@@ -54,3 +54,6 @@ and works across compose projects that join the external `crunch` network.
 - **Use internal names, not public hostnames.** Inside a container `localhost` means the container
   itself, so `https://app1.localhost` fails; in production a public hostname works but loops out
   through the router.
+
+## License
+MIT — see [LICENSE](LICENSE).
