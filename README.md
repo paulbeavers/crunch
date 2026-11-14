@@ -27,6 +27,14 @@ Containers in other compose projects can join with `networks: { crunch: { extern
 - **Production:** set `DOMAIN` and `ACME_EMAIL` in `.env`, point DNS at the node, then
   `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` — Let's Encrypt certificates are issued and renewed automatically.
 
+## Production hardening: Docker socket proxy
+The production overlay does not mount `/var/run/docker.sock` into the router. Access to that socket
+is effectively root on the host, and the router is the internet-facing container. Instead,
+`crunch-socket-proxy` ([tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy))
+holds the socket and allows only the read-only calls Traefik needs (list containers, watch events);
+everything else, such as creating or exec'ing into containers, gets 403. It sits on an internal
+network that only the router joins.
+
 ## Container-to-container communication
 Containers on the same Docker network reach each other directly by service or container name
 (e.g. `http://app1/`) over plain HTTP on the app's internal port. This bypasses the router and TLS,

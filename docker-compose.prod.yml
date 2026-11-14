@@ -1,4 +1,5 @@
-# Production overlay: real domain + automatic Let's Encrypt certificates.
+# Production overlay: real domain + automatic Let's Encrypt certificates,
+# and the Docker socket hidden behind a restricted proxy.
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # Requires: DNS for each host pointing at this node, ports 80/443 reachable from the internet.
 
@@ -10,8 +11,37 @@ services:
       TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_HTTPCHALLENGE_ENTRYPOINT: web
       # Every router on :443 gets a cert from Let's Encrypt automatically
       TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS_CERTRESOLVER: le
-    volumes:
+      # Talk to Docker through the restricted proxy instead of the raw socket
+      TRAEFIK_PROVIDERS_DOCKER_ENDPOINT: tcp://socket-proxy:2375
+    # !override replaces the base lists: drops the docker.sock mount from the router
+    volumes: !override
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/certs:ro
       - letsencrypt:/letsencrypt
+    networks: !override
+      - crunch
+      - socket-proxy
+    depends_on:
+      - socket-proxy
+
+  # Only container with the Docker socket. Allows read-only container listing and
+  # event streaming (all Traefik needs); every other API call is denied.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    container_name: crunch-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [socket-proxy]
+
+networks:
+  socket-proxy:
+    name: crunch-socket-proxy
+    internal: true   # no outside access; only the router joins it
 
 volumes:
   letsencrypt:
