@@ -27,6 +27,14 @@ Containers in other compose projects can join with `networks: { crunch: { extern
 - **Production:** set `DOMAIN` and `ACME_EMAIL` in `.env`, point DNS at the node, then
   `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` — Let's Encrypt certificates are issued and renewed automatically.
 
+## Plain HTTP (local debugging)
+By default port 80 only redirects to HTTPS. To also serve sites over plain HTTP:
+
+    docker compose -f docker-compose.yml -f docker-compose.http.yml up -d
+
+This removes the redirect and attaches the sample routers to both entrypoints. Apps in other repos
+opt in with `traefik.http.routers.<name>.entrypoints: web,websecure`. Never use this overlay in production.
+
 ## Production hardening: Docker socket proxy
 The production overlay does not mount `/var/run/docker.sock` into the router. Access to that socket
 is effectively root on the host, and the router is the internet-facing container. Instead,

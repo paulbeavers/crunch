@@ -1,0 +1,23 @@
+# Plain-HTTP overlay for local debugging: serves every sample site on port 80
+# without redirecting to HTTPS (HTTPS on 443 keeps working too).
+#   docker compose -f docker-compose.yml -f docker-compose.http.yml up -d
+# Do not use in production.
+
+services:
+  traefik:
+    environment:
+      # Remove the HTTP -> HTTPS redirect set in the base file
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO: !reset null
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME: !reset null
+    labels:
+      traefik.http.routers.dashboard.entrypoints: web,websecure
+
+  app1:
+    labels:
+      traefik.http.routers.app1.entrypoints: web,websecure
+  app2:
+    labels:
+      traefik.http.routers.app2.entrypoints: web,websecure
+  api:
+    labels:
+      traefik.http.routers.api.entrypoints: web,websecure
